@@ -21,12 +21,14 @@ Proyecto de Machine Learning para entrenar y usar un modelo de clasificacion sob
 vehiculos/
   app.py
   artifacts/
+  conda/
   data/raw/
+  deploy/
   notebooks/
+  requirements.txt
   scripts/
   src/vehicular_ml/
   tests/
-  environment.yml
   pyproject.toml
   README.md
 ```
@@ -60,8 +62,8 @@ bash scripts/run_dashboard.sh
 
 Para despliegue en Streamlit Community Cloud usa:
 
-- `Main file path`: `deploy/app.py`
-- Dependencias: `deploy/requirements.txt`
+- `Main file path`: `deploy/app.py` (recomendado) o `app.py`
+- Dependencias: `deploy/requirements.txt` o `requirements.txt`
 
 ## Comandos principales
 
