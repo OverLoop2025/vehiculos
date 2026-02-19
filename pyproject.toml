@@ -6,7 +6,6 @@ build-backend = "setuptools.build_meta"
 name = "vehicular-ml"
 version = "0.1.0"
 description = "Pipeline profesional para prediccion de fallas de motor y mantenimiento vehicular"
-readme = "README.md"
 requires-python = ">=3.11,<3.13"
 authors = [
   { name = "Equipo Vehicular ML" }
