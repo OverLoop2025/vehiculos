@@ -58,6 +58,11 @@ Para abrir el dashboard web con resultados:
 bash scripts/run_dashboard.sh
 ```
 
+Para despliegue en Streamlit Community Cloud usa:
+
+- `Main file path`: `deploy/app.py`
+- Dependencias: `deploy/requirements.txt`
+
 ## Comandos principales
 
 1. EDA
