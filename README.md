@@ -102,7 +102,13 @@ python -m vehicular_ml.cli predict \
 python -m pytest -q
 ```
 
-5. Dashboard web (Streamlit)
+5. Tests con resumen para dashboard
+
+```bash
+python scripts/run_tests_with_summary.py
+```
+
+6. Dashboard web (Streamlit)
 
 ```bash
 python -m streamlit run app.py
@@ -116,3 +122,5 @@ python -m streamlit run app.py
 - `artifacts/model/metrics.json`
 - `artifacts/model/test_predictions.csv`
 - `artifacts/predicciones.csv`
+- `artifacts/tests/junit.xml`
+- `artifacts/tests/summary.json`

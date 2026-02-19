@@ -21,6 +21,6 @@ python -m vehicular_ml.cli predict \
   --model artifacts/model/model.joblib \
   --data data/raw/vehicular_mantenimiento_sample.csv \
   --output artifacts/predicciones.csv
-python -m pytest -q
+python scripts/run_tests_with_summary.py
 
 echo "[OK] Pipeline completo ejecutado correctamente."

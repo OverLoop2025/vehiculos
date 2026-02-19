@@ -20,6 +20,7 @@ if str(SRC_DIR) not in sys.path:
 from vehicular_ml.data import ensure_target_column, load_dataset
 from vehicular_ml.eda import run_eda
 from vehicular_ml.predict import predict_dataframe
+from vehicular_ml.testing import run_pytest_with_summary
 from vehicular_ml.training import TrainingConfig, train_and_save
 
 st.set_page_config(page_title="Vehicular ML Dashboard", layout="wide")
@@ -28,6 +29,7 @@ DEFAULT_METRICS_PATH = PROJECT_ROOT / "artifacts" / "model" / "metrics.json"
 DEFAULT_PREDICTIONS_PATH = PROJECT_ROOT / "artifacts" / "predicciones.csv"
 DEFAULT_EDA_DIR = PROJECT_ROOT / "artifacts" / "eda"
 DEFAULT_MODEL_PATH = PROJECT_ROOT / "artifacts" / "model" / "model.joblib"
+DEFAULT_TEST_SUMMARY_PATH = PROJECT_ROOT / "artifacts" / "tests" / "summary.json"
 DEFAULT_DATA_PATH = PROJECT_ROOT / "data" / "raw" / "vehicular_mantenimiento_sample.csv"
 EDA_FIGURE_NAMES = [
     "figura_1_distribucion_kilometraje.png",
@@ -96,6 +98,7 @@ def generate_demo_artifacts(
     predictions_path: Path,
     eda_dir: Path,
     model_path: Path,
+    tests_summary_path: Path,
 ) -> None:
     if not data_path.exists():
         raise FileNotFoundError(f"No existe dataset de demo: {data_path}")
@@ -116,6 +119,8 @@ def generate_demo_artifacts(
     pred_df = predict_dataframe(model_path, df)
     predictions_path.parent.mkdir(parents=True, exist_ok=True)
     pred_df.to_csv(predictions_path, index=False)
+
+    run_pytest_with_summary(project_root=PROJECT_ROOT, output_dir=tests_summary_path.parent)
 
 
 def _read_uploaded_file(uploaded_file: st.runtime.uploaded_file_manager.UploadedFile) -> pd.DataFrame:
@@ -155,6 +160,59 @@ def render_metrics_section(metrics_path: Path) -> None:
 
     with st.expander("Detalle completo (metrics.json)"):
         st.json(payload)
+
+
+def render_model_context_section(metrics_path: Path) -> None:
+    st.subheader("Contexto del modelo")
+    if not metrics_path.exists():
+        st.info("No hay contexto del modelo aun. Genera artefactos primero.")
+        return
+
+    try:
+        payload = _read_json(str(metrics_path))
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"No se pudo leer contexto del modelo: {exc}")
+        return
+
+    overview = st.columns(3)
+    overview[0].metric("Train rows", int(payload.get("train_rows", 0)))
+    overview[1].metric("Test rows", int(payload.get("test_rows", 0)))
+    overview[2].metric("Fecha artefactos", "Disponible" if payload.get("created_at_utc") else "N/D")
+
+    created_at = payload.get("created_at_utc")
+    if created_at:
+        st.caption(f"Ultima generacion (UTC): {created_at}")
+
+    config = payload.get("config", {})
+    if config:
+        with st.expander("Configuracion de entrenamiento"):
+            st.json(config)
+
+    confusion = payload.get("confusion_matrix")
+    if isinstance(confusion, dict) and isinstance(confusion.get("matrix"), list):
+        st.write("Matriz de confusion")
+        labels = confusion.get("labels", [0, 1])
+        matrix_df = pd.DataFrame(
+            confusion["matrix"],
+            index=[f"Real {label}" for label in labels],
+            columns=[f"Pred {label}" for label in labels],
+        )
+        st.dataframe(matrix_df, width="content")
+
+        c_cols = st.columns(4)
+        c_cols[0].metric("TP", int(confusion.get("tp", 0)))
+        c_cols[1].metric("TN", int(confusion.get("tn", 0)))
+        c_cols[2].metric("FP", int(confusion.get("fp", 0)))
+        c_cols[3].metric("FN", int(confusion.get("fn", 0)))
+
+    importances = payload.get("feature_importances_top")
+    if isinstance(importances, list) and importances:
+        st.write("Importancia de variables (Top)")
+        importance_df = pd.DataFrame(importances)
+        st.dataframe(importance_df, width="stretch")
+        if {"feature", "importance"}.issubset(importance_df.columns):
+            chart_df = importance_df.set_index("feature")[["importance"]]
+            st.bar_chart(chart_df)
 
 
 def render_eda_section(eda_dir: Path) -> None:
@@ -226,6 +284,63 @@ def render_interactive_prediction(model_path: Path) -> None:
     )
 
 
+def render_tests_section(tests_summary_path: Path) -> None:
+    st.subheader("Calidad de software (tests)")
+
+    if not tests_summary_path.exists():
+        st.info("No hay resumen de tests. Ejecuta tests para generar contexto de calidad.")
+        if st.button("Ejecutar tests ahora", key="run_tests_missing"):
+            with st.spinner("Ejecutando tests y generando resumen..."):
+                try:
+                    run_pytest_with_summary(
+                        project_root=PROJECT_ROOT,
+                        output_dir=tests_summary_path.parent,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    st.error(f"No se pudieron ejecutar tests: {exc}")
+                else:
+                    st.success("Resumen de tests generado.")
+                    st.rerun()
+        return
+
+    try:
+        payload = _read_json(str(tests_summary_path))
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"No se pudo leer el resumen de tests: {exc}")
+        return
+
+    counts = payload.get("counts", {})
+    status = str(payload.get("status", "unknown")).upper()
+    generated_at = payload.get("generated_at_utc", "N/D")
+    duration = float(payload.get("duration_seconds", 0.0))
+
+    cols = st.columns(6)
+    cols[0].metric("Estado", status)
+    cols[1].metric("Tests", int(counts.get("tests", 0)))
+    cols[2].metric("Passed", int(counts.get("passed", 0)))
+    cols[3].metric("Failed", int(counts.get("failed", 0)))
+    cols[4].metric("Errors", int(counts.get("errors", 0)))
+    cols[5].metric("Skipped", int(counts.get("skipped", 0)))
+
+    st.caption(f"Ultima ejecucion (UTC): {generated_at} | Duracion: {duration:.2f}s")
+
+    if st.button("Re-ejecutar tests", key="run_tests_existing"):
+        with st.spinner("Ejecutando tests y actualizando resumen..."):
+            try:
+                run_pytest_with_summary(
+                    project_root=PROJECT_ROOT,
+                    output_dir=tests_summary_path.parent,
+                )
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"No se pudieron ejecutar tests: {exc}")
+            else:
+                st.success("Resumen de tests actualizado.")
+                st.rerun()
+
+    with st.expander("Detalle de resumen de tests"):
+        st.json(payload)
+
+
 def main() -> None:
     st.title("Vehicular ML Dashboard")
     st.caption("Visualizacion de metricas, EDA y predicciones del proyecto.")
@@ -236,6 +351,7 @@ def main() -> None:
     predictions_path = _path_input("predicciones.csv", DEFAULT_PREDICTIONS_PATH)
     eda_dir = _path_input("Directorio EDA", DEFAULT_EDA_DIR)
     model_path = _path_input("model.joblib", DEFAULT_MODEL_PATH)
+    tests_summary_path = _path_input("tests summary", DEFAULT_TEST_SUMMARY_PATH)
 
     artifacts_ready = _artifacts_ready(
         metrics_path=metrics_path,
@@ -250,7 +366,7 @@ def main() -> None:
             "No hay artefactos generados. Usa el boton para crear una demo automaticamente."
         )
         if st.sidebar.button("Generar artefactos demo"):
-            with st.spinner("Generando artefactos (EDA + modelo + predicciones)..."):
+            with st.spinner("Generando artefactos (EDA + modelo + predicciones + tests)..."):
                 try:
                     generate_demo_artifacts(
                         data_path=data_path,
@@ -258,6 +374,7 @@ def main() -> None:
                         predictions_path=predictions_path,
                         eda_dir=eda_dir,
                         model_path=model_path,
+                        tests_summary_path=tests_summary_path,
                     )
                 except Exception as exc:  # noqa: BLE001
                     st.sidebar.error(f"No se pudo generar la demo: {exc}")
@@ -271,12 +388,17 @@ def main() -> None:
     _status_line(st.sidebar, predictions_path, "Predicciones")
     _status_line(st.sidebar, eda_dir, "EDA")
     _status_line(st.sidebar, model_path, "Modelo")
+    _status_line(st.sidebar, tests_summary_path, "Tests")
 
     render_metrics_section(metrics_path)
+    st.markdown("---")
+    render_model_context_section(metrics_path)
     st.markdown("---")
     render_eda_section(eda_dir)
     st.markdown("---")
     render_predictions_section(predictions_path)
+    st.markdown("---")
+    render_tests_section(tests_summary_path)
     st.markdown("---")
     render_interactive_prediction(model_path)
 

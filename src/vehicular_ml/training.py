@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,7 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
     accuracy_score,
+    confusion_matrix,
     f1_score,
     precision_score,
     recall_score,
@@ -76,6 +78,54 @@ def _compute_metrics(y_true: pd.Series, y_pred: Any, y_prob: Any | None) -> dict
     return metrics
 
 
+def _compute_confusion_matrix(y_true: pd.Series, y_pred: Any) -> dict[str, Any]:
+    labels = [0, 1]
+    matrix = confusion_matrix(y_true, y_pred, labels=labels)
+    tn, fp, fn, tp = matrix.ravel()
+    return {
+        "labels": labels,
+        "matrix": matrix.tolist(),
+        "tn": int(tn),
+        "fp": int(fp),
+        "fn": int(fn),
+        "tp": int(tp),
+    }
+
+
+def _extract_feature_importances(pipeline: Pipeline, top_n: int = 15) -> list[dict[str, float]]:
+    model = pipeline.named_steps.get("model")
+    preprocessor = pipeline.named_steps.get("preprocessor")
+
+    if model is None or preprocessor is None:
+        return []
+    if not hasattr(model, "feature_importances_"):
+        return []
+    if not hasattr(preprocessor, "get_feature_names_out"):
+        return []
+
+    try:
+        feature_names = preprocessor.get_feature_names_out()
+    except Exception:  # noqa: BLE001
+        return []
+
+    importances = getattr(model, "feature_importances_", None)
+    if importances is None:
+        return []
+    if len(feature_names) != len(importances):
+        return []
+
+    ranked = sorted(
+        zip(feature_names, importances),
+        key=lambda pair: float(pair[1]),
+        reverse=True,
+    )[:top_n]
+
+    return [
+        {"feature": str(feature), "importance": float(importance)}
+        for feature, importance in ranked
+    ]
+
+
 def train_and_save(
     df: pd.DataFrame,
     output_dir: str | Path,
@@ -123,6 +173,8 @@ def train_and_save(
     if hasattr(pipeline, "predict_proba"):
         y_prob = pipeline.predict_proba(x_test)[:, 1]
     metrics = _compute_metrics(y_test, y_pred, y_prob)
+    confusion = _compute_confusion_matrix(y_test, y_pred)
+    feature_importances = _extract_feature_importances(pipeline=pipeline, top_n=15)
 
     model_path = output_dir / "model.joblib"
     metrics_path = output_dir / "metrics.json"
@@ -137,11 +189,14 @@ def train_and_save(
     result_df.to_csv(predictions_path, index=False)
 
     payload = {
+        "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "config": asdict(config),
         "train_rows": int(len(x_train)),
         "test_rows": int(len(x_test)),
         "target_distribution": {str(k): int(v) for k, v in class_counts.items()},
         "metrics": metrics,
+        "confusion_matrix": confusion,
+        "feature_importances_top": feature_importances,
         "artifacts": {
             "model": str(model_path),
             "metrics": str(metrics_path),

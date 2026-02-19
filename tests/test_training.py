@@ -45,6 +45,11 @@ def test_train_and_save_generates_artifacts(tmp_path: Path) -> None:
     for metric_name in ["accuracy", "precision", "recall", "f1"]:
         assert 0.0 <= metrics[metric_name] <= 1.0
 
+    assert "created_at_utc" in result
+    assert "confusion_matrix" in result
+    assert "feature_importances_top" in result
+    assert isinstance(result["feature_importances_top"], list)
+
 
 def test_train_and_save_raises_if_target_has_single_class(tmp_path: Path) -> None:
     df = synthetic_training_df()
