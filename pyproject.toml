@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vehicular-ml"
+version = "0.1.0"
+description = "Pipeline profesional para prediccion de fallas de motor y mantenimiento vehicular"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+authors = [
+  { name = "Equipo Vehicular ML" }
+]
+dependencies = [
+  "numpy>=1.26,<3",
+  "pandas>=2.2,<3",
+  "scikit-learn>=1.5,<2",
+  "matplotlib>=3.8,<4",
+  "seaborn>=0.13,<0.14",
+  "joblib>=1.4,<2",
+  "openpyxl>=3.1,<4"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9"
+]
+
+[project.scripts]
+vehicular-ml = "vehicular_ml.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

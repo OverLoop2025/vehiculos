@@ -1,0 +1,83 @@
+🔹 Dataset integrado en el programa
+import pandas as pd
+
+# ===============================
+# DATASET DE FALLAS VEHICULARES
+# ===============================
+
+data = {
+    "kilometraje": [45000, 120000, 80000, 160000, 30000, 140000, 60000, 175000, 50000, 130000],
+    "temperatura_motor": [90, 105, 95, 110, 85, 108, 92, 115, 88, 107],
+    "rpm": [1500, 2200, 1800, 2500, 1300, 2400, 1700, 2700, 1600, 2300],
+    "horas_uso": [800, 2500, 1500, 3200, 500, 2900, 1100, 4100, 900, 2600],
+    "voltaje_bateria": [13.2, 11.9, 12.8, 11.7, 13.5, 11.8, 12.9, 11.6, 13.1, 11.9],
+    "marca": ["Toyota", "Hyundai", "Kia", "Chevrolet", "Nissan", "Toyota", "Hyundai", "Chevrolet", "Kia", "Nissan"],
+    "combustible": ["Gasolina", "Diésel", "Gasolina", "GLP", "Gasolina", "Diésel", "Gasolina", "GLP", "Gasolina", "Diésel"],
+    "tipo_aceite": ["Sintético", "Semisintético", "Sintético", "Mineral", "Sintético", "Semisintético", "Sintético", "Mineral", "Sintético", "Semisintético"],
+    "codigo_falla": ["P0300", "P0420", "P0171", "P0562", "P0115", "P0300", "P0171", "P0420", "P0115", "P0562"]
+}
+
+df = pd.DataFrame(data)
+
+print("Dataset cargado correctamente:")
+df.head()
+
+🔹 Definición de variable objetivo (mantenimiento)
+
+Esto lo vuelve realmente útil para Machine Learning automotriz:
+
+df["requiere_mantenimiento"] = (
+    (df["kilometraje"] > 120000) |
+    (df["temperatura_motor"] > 105) |
+    (df["voltaje_bateria"] < 12) |
+    (df["codigo_falla"].isin(["P0300", "P0420"]))
+).astype(int)
+
+df
+
+🔹 Preparación para ML (pipelines completos)
+from sklearn.model_selection import train_test_split
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.impute import SimpleImputer
+
+# Variables
+X = df.drop("requiere_mantenimiento", axis=1)
+y = df["requiere_mantenimiento"]
+
+num_cols = ["kilometraje", "temperatura_motor", "rpm", "horas_uso", "voltaje_bateria"]
+cat_cols = ["marca", "combustible", "tipo_aceite", "codigo_falla"]
+
+# Pipelines
+num_pipeline = Pipeline([
+    ("imputer", SimpleImputer(strategy="median")),
+    ("scaler", StandardScaler())
+])
+
+cat_pipeline = Pipeline([
+    ("imputer", SimpleImputer(strategy="most_frequent")),
+    ("onehot", OneHotEncoder(handle_unknown="ignore"))
+])
+
+full_pipeline = ColumnTransformer([
+    ("num", num_pipeline, num_cols),
+    ("cat", cat_pipeline, cat_cols)
+])
+
+X_prepared = full_pipeline.fit_transform(X)
+
+🔹 Modelo de predicción de fallas
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X_prepared, y, test_size=0.2, random_state=42
+)
+
+model = RandomForestClassifier(random_state=42)
+model.fit(X_train, y_train)
+
+y_pred = model.predict(X_test)
+
+print("Exactitud del modelo:", accuracy_score(y_test, y_pred))
