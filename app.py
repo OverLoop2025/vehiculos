@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -16,8 +17,10 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from vehicular_ml.data import ensure_target_column
+from vehicular_ml.data import ensure_target_column, load_dataset
+from vehicular_ml.eda import run_eda
 from vehicular_ml.predict import predict_dataframe
+from vehicular_ml.training import TrainingConfig, train_and_save
 
 st.set_page_config(page_title="Vehicular ML Dashboard", layout="wide")
 
@@ -25,6 +28,13 @@ DEFAULT_METRICS_PATH = PROJECT_ROOT / "artifacts" / "model" / "metrics.json"
 DEFAULT_PREDICTIONS_PATH = PROJECT_ROOT / "artifacts" / "predicciones.csv"
 DEFAULT_EDA_DIR = PROJECT_ROOT / "artifacts" / "eda"
 DEFAULT_MODEL_PATH = PROJECT_ROOT / "artifacts" / "model" / "model.joblib"
+DEFAULT_DATA_PATH = PROJECT_ROOT / "data" / "raw" / "vehicular_mantenimiento_sample.csv"
+EDA_FIGURE_NAMES = [
+    "figura_1_distribucion_kilometraje.png",
+    "figura_2_boxplot_temperatura.png",
+    "figura_3_mapa_calor_correlacion.png",
+    "figura_4_scatter_kilometraje_falla.png",
+]
 
 
 def _path_input(label: str, default_path: Path) -> Path:
@@ -53,6 +63,59 @@ def _status_line(container: Any, path: Path, label: str) -> None:
         container.success(f"{label}: OK")
     else:
         container.warning(f"{label}: No encontrado ({path})")
+
+
+def _copy_if_needed(source: Path, destination: Path) -> None:
+    if source.resolve() == destination.resolve():
+        return
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+
+
+def _eda_outputs_exist(eda_dir: Path) -> bool:
+    return all((eda_dir / file_name).exists() for file_name in EDA_FIGURE_NAMES)
+
+
+def _artifacts_ready(
+    metrics_path: Path,
+    predictions_path: Path,
+    eda_dir: Path,
+    model_path: Path,
+) -> bool:
+    return (
+        metrics_path.exists()
+        and predictions_path.exists()
+        and model_path.exists()
+        and _eda_outputs_exist(eda_dir)
+    )
+
+
+def generate_demo_artifacts(
+    data_path: Path,
+    metrics_path: Path,
+    predictions_path: Path,
+    eda_dir: Path,
+    model_path: Path,
+) -> None:
+    if not data_path.exists():
+        raise FileNotFoundError(f"No existe dataset de demo: {data_path}")
+
+    df = load_dataset(data_path)
+    run_eda(df=df, output_dir=eda_dir)
+
+    summary = train_and_save(
+        df=df,
+        output_dir=model_path.parent,
+        config=TrainingConfig(test_size=0.2, random_state=42, n_estimators=300),
+    )
+    generated_model_path = Path(summary["artifacts"]["model"])
+    generated_metrics_path = Path(summary["artifacts"]["metrics"])
+    _copy_if_needed(generated_model_path, model_path)
+    _copy_if_needed(generated_metrics_path, metrics_path)
+
+    pred_df = predict_dataframe(model_path, df)
+    predictions_path.parent.mkdir(parents=True, exist_ok=True)
+    pred_df.to_csv(predictions_path, index=False)
 
 
 def _read_uploaded_file(uploaded_file: st.runtime.uploaded_file_manager.UploadedFile) -> pd.DataFrame:
@@ -96,19 +159,12 @@ def render_metrics_section(metrics_path: Path) -> None:
 
 def render_eda_section(eda_dir: Path) -> None:
     st.subheader("Graficos EDA")
-    figure_names = [
-        "figura_1_distribucion_kilometraje.png",
-        "figura_2_boxplot_temperatura.png",
-        "figura_3_mapa_calor_correlacion.png",
-        "figura_4_scatter_kilometraje_falla.png",
-    ]
-
     if not eda_dir.exists():
         st.info("No se encontro la carpeta EDA. Ejecuta el comando de EDA primero.")
         return
 
     cols = st.columns(2)
-    for idx, file_name in enumerate(figure_names):
+    for idx, file_name in enumerate(EDA_FIGURE_NAMES):
         path = eda_dir / file_name
         if path.exists():
             cols[idx % 2].image(str(path), caption=file_name, width="stretch")
@@ -175,10 +231,39 @@ def main() -> None:
     st.caption("Visualizacion de metricas, EDA y predicciones del proyecto.")
 
     st.sidebar.header("Rutas de artefactos")
+    data_path = _path_input("Dataset demo", DEFAULT_DATA_PATH)
     metrics_path = _path_input("metrics.json", DEFAULT_METRICS_PATH)
     predictions_path = _path_input("predicciones.csv", DEFAULT_PREDICTIONS_PATH)
     eda_dir = _path_input("Directorio EDA", DEFAULT_EDA_DIR)
     model_path = _path_input("model.joblib", DEFAULT_MODEL_PATH)
+
+    artifacts_ready = _artifacts_ready(
+        metrics_path=metrics_path,
+        predictions_path=predictions_path,
+        eda_dir=eda_dir,
+        model_path=model_path,
+    )
+
+    if not artifacts_ready:
+        st.sidebar.markdown("---")
+        st.sidebar.info(
+            "No hay artefactos generados. Usa el boton para crear una demo automaticamente."
+        )
+        if st.sidebar.button("Generar artefactos demo"):
+            with st.spinner("Generando artefactos (EDA + modelo + predicciones)..."):
+                try:
+                    generate_demo_artifacts(
+                        data_path=data_path,
+                        metrics_path=metrics_path,
+                        predictions_path=predictions_path,
+                        eda_dir=eda_dir,
+                        model_path=model_path,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    st.sidebar.error(f"No se pudo generar la demo: {exc}")
+                else:
+                    st.sidebar.success("Artefactos demo generados.")
+                    st.rerun()
 
     st.sidebar.markdown("---")
     st.sidebar.write("Estado de archivos")

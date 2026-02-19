@@ -64,6 +64,7 @@ Para despliegue en Streamlit Community Cloud usa:
 
 - `Main file path`: `deploy/app.py` (recomendado) o `app.py`
 - Dependencias: `deploy/requirements.txt` o `requirements.txt`
+- Si la app inicia sin datos, usa el boton `Generar artefactos demo` en la barra lateral.
 
 ## Comandos principales
 
