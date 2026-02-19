@@ -54,5 +54,8 @@ artifacts/*
 # Local data outputs (keep sample raw data under data/raw)
 data/processed/
 
+# Local docs / evaluation drafts (do not version)
+importante/
+
 # Windows ADS metadata files accidentally copied on Linux
 *:Zone.Identifier
