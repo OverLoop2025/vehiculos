@@ -1,6 +1,6 @@
 # Prediccion de Fallas de Motor y Mantenimiento Vehicular
 
-Proyecto local de Machine Learning para entrenar y usar un modelo de clasificacion sobre mantenimiento vehicular.
+Proyecto de Machine Learning para entrenar y usar un modelo de clasificacion sobre mantenimiento vehicular.
 
 ## Que incluye este proyecto
 
@@ -19,6 +19,7 @@ Proyecto local de Machine Learning para entrenar y usar un modelo de clasificaci
 
 ```text
 vehiculos/
+  app.py
   artifacts/
   data/raw/
   notebooks/
@@ -49,6 +50,12 @@ Para ejecutar todo el flujo completo:
 
 ```bash
 bash scripts/run_pipeline.sh
+```
+
+Para abrir el dashboard web con resultados:
+
+```bash
+bash scripts/run_dashboard.sh
 ```
 
 ## Comandos principales
@@ -85,6 +92,12 @@ python -m vehicular_ml.cli predict \
 
 ```bash
 python -m pytest -q
+```
+
+5. Dashboard web (Streamlit)
+
+```bash
+python -m streamlit run app.py
 ```
 
 ## Salidas esperadas
